@@ -342,9 +342,10 @@ elif tab == "Застосування евристик":
     st.subheader("Покрокове застосування евристик")
     ordered_keys = [k for k, _ in ranked]
     final_set, step_log = apply_heuristicsStep(OBJECTS, ordered_keys, counts, scores)
+    final_set = sorted(final_set, key=lambda x: scores[x], reverse=True)[:10]
 
     st.dataframe(pd.DataFrame(step_log), use_container_width=True)
-    st.subheader(f"Фінальна підмножина: {len(final_set)} об'єктів")
+    st.subheader(f"Фінальна підмножина")
     final_df = pd.DataFrame(
         [
             {
@@ -379,12 +380,7 @@ elif tab == "Генетичний алгоритм":
         ordered_keys = [k for k, _ in ranked]
 
     final_set, _ = apply_heuristicsStep(OBJECTS, ordered_keys, counts, scores)
-
-    st.info(
-        f"Підмножина для ранжування: **{len(final_set)} об'єктів**: "
-        + ", ".join(final_set)
-    )
-
+    final_set = sorted(final_set, key=lambda x: scores[x], reverse=True)[:10]
     pop_size = 80
     generations = 200
     mut_rate = 0.10
