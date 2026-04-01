@@ -393,7 +393,7 @@ elif tab == "Генетичний алгоритм":
         st.subheader("Результат ранжування")
         ga_df = pd.DataFrame(
             [
-                {"Місце": i + 1, "Об'єкт": o, "Бали (ЛР1)": scores[o]}
+                {"Місце": i + 1, "Об'єкт": o, "Бали": scores[o]}
                 for i, o in enumerate(best_perm)
             ]
         )
@@ -418,7 +418,7 @@ elif tab == "Генетичний алгоритм":
         with col2:
             st.pyplot(fig)
 
-        st.success(f"Переможець: **{best_perm[0]}**  ({scores[best_perm[0]]} балів ЛР1)")
+
 
 elif tab == "Адмін":
     st.title("Адміністративна панель")
