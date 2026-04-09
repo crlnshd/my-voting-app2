@@ -460,23 +460,6 @@ elif tab == "Генетичний алгоритм":
 
         st.markdown(f"Ранжування (К1): **{' > '.join(perm1)}**")
 
-        fig1, ax1 = plt.subplots(figsize=(6.5, 2.5))
-        fig1.patch.set_alpha(0)
-        ax1.set_facecolor("none")
-        ax1.plot(hist1, color="#FFD700", linewidth=1.8)
-        # позначаємо ітерації де знайдено новий кращий
-        for it in iters1:
-            ax1.axvline(x=it - 1, color="#FFD700", linestyle=":", alpha=0.6)
-            ax1.text(it - 1, hist1[it - 1], str(it), color="#FFD700", fontsize=7, va="bottom")
-        ax1.set_xlabel("Покоління", color="white")
-        ax1.set_ylabel("Сума відстаней", color="white")
-        ax1.set_title("К1: збіжність суми відстаней", color="white")
-        ax1.tick_params(colors="white")
-        for sp in ax1.spines.values():
-            sp.set_color("white")
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            st.pyplot(fig1)
 
         st.divider()
 
@@ -488,23 +471,6 @@ elif tab == "Генетичний алгоритм":
         col_f.metric("Кількість розв'язків з цим значенням", nsol2)
 
         st.markdown(f"Ранжування (К2): **{' > '.join(perm2)}**")
-
-        fig2, ax2 = plt.subplots(figsize=(6.5, 2.5))
-        fig2.patch.set_alpha(0)
-        ax2.set_facecolor("none")
-        ax2.plot(hist2, color="#00FF7F", linewidth=1.8)
-        for it in iters2:
-            ax2.axvline(x=it - 1, color="#00FF7F", linestyle=":", alpha=0.6)
-            ax2.text(it - 1, hist2[it - 1], str(it), color="#00FF7F", fontsize=7, va="bottom")
-        ax2.set_xlabel("Покоління", color="white")
-        ax2.set_ylabel("Максимум відстані", color="white")
-        ax2.set_title("К2: збіжність максимуму відстані", color="white")
-        ax2.tick_params(colors="white")
-        for sp in ax2.spines.values():
-            sp.set_color("white")
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            st.pyplot(fig2)
 
         st.divider()
 
