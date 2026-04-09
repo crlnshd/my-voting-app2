@@ -166,51 +166,43 @@ def apply_heuristicsStep(objects_list: list, heuristics_order: list, counts: dic
     return current, log
 
 
-def load_expert_rankings(votes_file: str, objects_subset: list) -> list[list]:
-    if not os.path.exists(votes_file):
-        return []
-    df = pd.read_csv(votes_file)
-    subset_set = set(objects_subset)
-    rankings = []
-    for _, row in df.iterrows():
-        partial = [str(row.get(col, "")).strip() for col in ("choice1", "choice2", "choice3")]
-        partial = [o for o in partial if o in subset_set]
-        if partial:
-            rankings.append(partial)
-    return rankings
+
+def generate_expert_perms(objects_subset: list, n_experts: int = 20, seed: int = 42) -> list[list]:
+    # генерує n_experts випадкових повних перестановок усіх об'єктів підмножини
+    rng = random.Random(seed)
+    return [rng.sample(objects_subset, len(objects_subset)) for _ in range(n_experts)]
 
 
-def kendall_distance_partial(candidate_perm: list, expert_partial: list) -> int:
-    pos = {o: i for i, o in enumerate(candidate_perm)}
-    distance = 0
-    for i in range(len(expert_partial)):
-        for j in range(i + 1, len(expert_partial)):
-            a, b = expert_partial[i], expert_partial[j]
-            if pos.get(a, 0) > pos.get(b, 0):
-                distance += 1
-    return distance
+def kendall_dist(perm_a: list, perm_b: list) -> int:
+    pos = {o: i for i, o in enumerate(perm_a)}
+    dist = 0
+    n = len(perm_b)
+    for i in range(n):
+        for j in range(i + 1, n):
+            if pos[perm_b[i]] > pos[perm_b[j]]:
+                dist += 1
+    return dist
 
 
 def genetic_rank(
     objects_subset: list,
-    expert_rankings: list[list],
-    pop_size: int = 60,
+    expert_perms: list[list],
+    fitness_mode: str = "sum",
+    pop_size: int = 80,
     generations: int = 200,
     mut_rate: float = 0.10,
-    w_sum: float = 1.0,
-    w_max: float = 1.0,
-) -> tuple[list, list, list]:
+) -> tuple[list, float, list, list, int]:
+    # повертає: (найкраща перестановка, найкраще значення критерію,
     n = len(objects_subset)
     if n == 0:
-        return [], [], []
+        return [], 0, [], [], 0
 
     def fitness(perm: list) -> float:
-        if not expert_rankings:
-            return 0.0
-        distances = [kendall_distance_partial(perm, exp) for exp in expert_rankings]
-        sum_dist = sum(distances)   # критерій 1: сума відстаней (мінімізуємо)
-        max_dist = max(distances)   # критерій 2: максимум відстані (мінімізуємо)
-        return -(w_sum * sum_dist + w_max * max_dist)
+        dists = [kendall_dist(perm, exp) for exp in expert_perms]
+        if fitness_mode == "sum":
+            return -sum(dists)
+        else:
+            return -max(dists)
 
     def crosover(p1: list, p2: list) -> list:
         a, b = sorted(random.sample(range(n), 2))
@@ -235,24 +227,27 @@ def genetic_rank(
     popul = [random.sample(objects_subset, n) for _ in range(pop_size)]
     best_perm = None
     best_fit = float("-inf")
-    history_sum = []
-    history_max = []
+    history = []
+    improve_iters = []  # номери ітерацій де знайдено новий кращий розв'язок
+    best_solutions = [] # всі унікальні перестановки з найкращим значенням
 
-    for _ in range(generations):
+    for gen in range(generations):
         ranked_pop = sorted(popul, key=fitness, reverse=True)
         top_fit = fitness(ranked_pop[0])
-        # запам'ятовуємо найкращого
+
         if top_fit > best_fit:
+            # знайдено новий кращий розв'язок
             best_fit = top_fit
             best_perm = ranked_pop[0][:]
+            improve_iters.append(gen + 1)
+            best_solutions = [best_perm[:]]
+        elif top_fit == best_fit:
+            # ще один розв'язок з тим самим значенням
+            candidate = ranked_pop[0][:]
+            if candidate not in best_solutions:
+                best_solutions.append(candidate)
 
-        if expert_rankings:
-            dists = [kendall_distance_partial(best_perm, exp) for exp in expert_rankings]
-            history_sum.append(sum(dists))
-            history_max.append(max(dists))
-        else:
-            history_sum.append(0)
-            history_max.append(0)
+        history.append(-best_fit)
 
         # -50%
         survivors = ranked_pop[: pop_size // 2]
@@ -263,7 +258,7 @@ def genetic_rank(
             new_pop.append(child)
         popul = new_pop
 
-    return best_perm, history_sum, history_max
+    return best_perm, -best_fit, history, improve_iters, len(best_solutions)
 
 
 scores, counts = load_scores()
@@ -423,75 +418,105 @@ elif tab == "Генетичний алгоритм":
 
     final_set, _ = apply_heuristicsStep(OBJECTS, ordered_keys, counts, scores)
     final_set = sorted(final_set, key=lambda x: scores[x], reverse=True)[:10]
-    expert_rankings = load_expert_rankings(VOTES_FILE, final_set)
+
+    # генеруємо 20 повних перестановок усіх 10 об'єктів - вхід для ГА
+    expert_perms = generate_expert_perms(final_set, n_experts=20, seed=42)
 
     st.markdown(
-        """
-**Критерій 1** — мінімізувати суму відстаней Кенделла від ранжувань усіх експертів
-
-**Критерій 2** — мінімізувати максимум відстані (найгірший консенсус)
-
-Бали з ЛР1 не використовуються. Фітнес: `-(w1 * sum_dist + w2 * max_dist)`
-"""
+        f"Підмножина: **{', '.join(final_set)}**\n\n"
+        f"Вхід: **20 випадково згенерованих повних перестановок** 10 об'єктів.\n\n"
+        "Два критерії запускаються **послідовно** — кожен окремим запуском ГА:\n\n"
+        "**К1** — мінімізувати **суму** відстаней Кенделла від 20 перестановок до знайденого ранжування\n\n"
+        "**К2** — мінімізувати **максимум** відстані (найгірший з 20 експертів)"
     )
-
-    col_w1, col_w2 = st.columns(2)
-    w_sum = col_w1.slider("Вага К1 (сума відстаней)", 0.0, 2.0, 1.0, 0.1)
-    w_max = col_w2.slider("Вага К2 (максимум відстані)", 0.0, 2.0, 1.0, 0.1)
 
     pop_size = 80
     generations = 200
     mut_rate = 0.10
 
     if st.button("Запустити ГА"):
-        with st.spinner("Виконується генетичний алгоритм.."):
-            best_perm, history_sum, history_max = genetic_rank(
-                final_set, expert_rankings, pop_size, generations, mut_rate, w_sum, w_max
+        #К1 (сума)
+        with st.spinner("К1: мінімізація суми відстаней.."):
+            perm1, val1, hist1, iters1, nsol1 = genetic_rank(
+                final_set, expert_perms, fitness_mode="sum",
+                pop_size=pop_size, generations=generations, mut_rate=mut_rate
             )
 
-        final_dists = [kendall_distance_partial(best_perm, exp) for exp in expert_rankings]
+        # К2 (максимум)
+        with st.spinner("К2: мінімізація максимуму відстані.."):
+            perm2, val2, hist2, iters2, nsol2 = genetic_rank(
+                final_set, expert_perms, fitness_mode="max",
+                pop_size=pop_size, generations=generations, mut_rate=mut_rate
+            )
 
-        st.subheader("Результат ранжування")
-        ga_df = pd.DataFrame(
-            [{"Місце": i + 1, "Об'єкт": o} for i, o in enumerate(best_perm)]
-        )
-        st.dataframe(ga_df, use_container_width=True)
+        st.divider()
 
-        col_a, col_b = st.columns(2)
-        col_a.metric("Сума відстаней Кенделла (К1)", sum(final_dists))
-        col_b.metric("Максимум відстані (К2)", max(final_dists) if final_dists else 0)
+        # результати К1
+        st.subheader("Критерій 1 — мінімізація суми відстаней")
+        col_a, col_b, col_c = st.columns(3)
+        col_a.metric("Найкраща сума відстаней", val1)
+        col_b.metric("Знайдено нових кращих у поколіннях", str(iters1))
+        col_c.metric("Кількість розв'язків з цим значенням", nsol1)
 
-        fig, ax = plt.subplots(figsize=(4.5, max(2, len(best_perm) * 0.22)))
-        fig.patch.set_alpha(0)
-        ax.set_facecolor("none")
-        reversed_perm = list(reversed(best_perm))
-        positions = list(range(len(reversed_perm), 0, -1))
-        ax.barh(reversed_perm, positions, color="white")
-        ax.tick_params(colors="white")
-        for sp in ax.spines.values():
+        st.markdown(f"Ранжування (К1): **{' > '.join(perm1)}**")
+
+        fig1, ax1 = plt.subplots(figsize=(6.5, 2.5))
+        fig1.patch.set_alpha(0)
+        ax1.set_facecolor("none")
+        ax1.plot(hist1, color="#FFD700", linewidth=1.8)
+        # позначаємо ітерації де знайдено новий кращий
+        for it in iters1:
+            ax1.axvline(x=it - 1, color="#FFD700", linestyle=":", alpha=0.6)
+            ax1.text(it - 1, hist1[it - 1], str(it), color="#FFD700", fontsize=7, va="bottom")
+        ax1.set_xlabel("Покоління", color="white")
+        ax1.set_ylabel("Сума відстаней", color="white")
+        ax1.set_title("К1: збіжність суми відстаней", color="white")
+        ax1.tick_params(colors="white")
+        for sp in ax1.spines.values():
             sp.set_color("white")
-        ax.set_xlabel("Місце (1 = найкраще)", color="white")
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            st.pyplot(fig)
+            st.pyplot(fig1)
 
-        st.subheader("Криві збіжності")
+        st.divider()
+
+        # результати К2
+        st.subheader("Критерій 2 — мінімізація максимуму відстані")
+        col_d, col_e, col_f = st.columns(3)
+        col_d.metric("Найкращий максимум відстані", val2)
+        col_e.metric("Знайдено нових кращих у поколіннях", str(iters2))
+        col_f.metric("Кількість розв'язків з цим значенням", nsol2)
+
+        st.markdown(f"Ранжування (К2): **{' > '.join(perm2)}**")
+
         fig2, ax2 = plt.subplots(figsize=(6.5, 2.5))
         fig2.patch.set_alpha(0)
         ax2.set_facecolor("none")
-        ax2.plot(history_sum, color="#00FFFF", linewidth=1.8, label="Сума відстаней (К1)")
-        ax2.plot(history_max, color="#FF6B35", linewidth=1.8, linestyle="--", label="Макс відстань (К2)")
+        ax2.plot(hist2, color="#00FF7F", linewidth=1.8)
+        for it in iters2:
+            ax2.axvline(x=it - 1, color="#00FF7F", linestyle=":", alpha=0.6)
+            ax2.text(it - 1, hist2[it - 1], str(it), color="#00FF7F", fontsize=7, va="bottom")
         ax2.set_xlabel("Покоління", color="white")
-        ax2.set_ylabel("Відстань Кенделла", color="white")
+        ax2.set_ylabel("Максимум відстані", color="white")
+        ax2.set_title("К2: збіжність максимуму відстані", color="white")
         ax2.tick_params(colors="white")
-        ax2.legend(facecolor="#111", labelcolor="white")
         for sp in ax2.spines.values():
             sp.set_color("white")
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             st.pyplot(fig2)
 
-        st.success(f"Переможець консенсусного ранжування: **{best_perm[0]}**")
+        st.divider()
+
+        st.subheader("Порівняння двох критеріїв")
+        dists1_for_perm1 = [kendall_dist(perm1, exp) for exp in expert_perms]
+        dists1_for_perm2 = [kendall_dist(perm2, exp) for exp in expert_perms]
+        cmp_df = pd.DataFrame({
+            "Критерій": ["Сума відстаней (К1)", "Максимум відстані (К2)", "Кількість розв'язків"],
+            "Ранжування К1": [sum(dists1_for_perm1), max(dists1_for_perm1), nsol1],
+            "Ранжування К2": [sum(dists1_for_perm2), max(dists1_for_perm2), nsol2],
+        })
+        st.dataframe(cmp_df, use_container_width=True, hide_index=True)
 
 elif tab == "Адмін":
     st.title("Адміністративна панель")
