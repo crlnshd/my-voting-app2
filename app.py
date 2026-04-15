@@ -173,7 +173,7 @@ def generate_expert_perms(objects_subset: list, n_experts: int = 20, seed: int =
     return [rng.sample(objects_subset, len(objects_subset)) for _ in range(n_experts)]
 
 
-def kendall_dist(perm_a: list, perm_b: list) -> int:
+def firstdist(perm_a: list, perm_b: list) -> int:
     pos = {o: i for i, o in enumerate(perm_a)}
     dist = 0
     n = len(perm_b)
@@ -198,7 +198,7 @@ def genetic_rank(
         return [], 0, [], [], 0
 
     def fitness(perm: list) -> float:
-        dists = [kendall_dist(perm, exp) for exp in expert_perms]
+        dists = [firstdist(perm, exp) for exp in expert_perms]
         if fitness_mode == "sum":
             return -sum(dists)
         else:
@@ -410,7 +410,7 @@ elif tab == "Генетичний алгоритм":
     st.title("Генетичний алгоритм")
     df_h = load_h_votes()
     if len(df_h) == 0:
-        st.warning("Немає голосів за евристики, використовується порядок E1...E7 за замовчуванням")
+        st.warning("Немає голосів за евристики, використовується порядок E1...E7")
         ordered_keys = list(HEURISTICS.keys())
     else:
         ranked = ranked_heuristics_from_votes(df_h)
@@ -419,16 +419,8 @@ elif tab == "Генетичний алгоритм":
     final_set, _ = apply_heuristicsStep(OBJECTS, ordered_keys, counts, scores)
     final_set = sorted(final_set, key=lambda x: scores[x], reverse=True)[:10]
 
-    # генеруємо 20 повних перестановок усіх 10 об'єктів - вхід для ГА
+    # 20 перестановок 10 об'єктів
     expert_perms = generate_expert_perms(final_set, n_experts=20, seed=42)
-
-    st.markdown(
-        f"Підмножина: **{', '.join(final_set)}**\n\n"
-        f"Вхід: **20 випадково згенерованих повних перестановок** 10 об'єктів.\n\n"
-        "Два критерії запускаються **послідовно** — кожен окремим запуском ГА:\n\n"
-        "**К1** — мінімізувати **суму** відстаней Кенделла від 20 перестановок до знайденого ранжування\n\n"
-        "**К2** — мінімізувати **максимум** відстані (найгірший з 20 експертів)"
-    )
 
     pop_size = 80
     generations = 200
@@ -436,14 +428,13 @@ elif tab == "Генетичний алгоритм":
 
     if st.button("Запустити ГА"):
         #К1 (сума)
-        with st.spinner("К1: мінімізація суми відстаней.."):
+        with st.spinner("К1: мінімізація суми відстаней"):
             perm1, val1, hist1, iters1, nsol1 = genetic_rank(
                 final_set, expert_perms, fitness_mode="sum",
                 pop_size=pop_size, generations=generations, mut_rate=mut_rate
             )
-
         # К2 (максимум)
-        with st.spinner("К2: мінімізація максимуму відстані.."):
+        with st.spinner("К2: мінімізація максимуму відстані"):
             perm2, val2, hist2, iters2, nsol2 = genetic_rank(
                 final_set, expert_perms, fitness_mode="max",
                 pop_size=pop_size, generations=generations, mut_rate=mut_rate
@@ -452,7 +443,7 @@ elif tab == "Генетичний алгоритм":
         st.divider()
 
         # результати К1
-        st.subheader("Критерій 1 — мінімізація суми відстаней")
+        st.subheader("Критерій 1 - мінімізація суми відстаней")
         col_a, col_b, col_c = st.columns(3)
         col_a.metric("Найкраща сума відстаней", val1)
         col_b.metric("Знайдено нових кращих у поколіннях", str(iters1))
@@ -464,7 +455,7 @@ elif tab == "Генетичний алгоритм":
         st.divider()
 
         # результати К2
-        st.subheader("Критерій 2 — мінімізація максимуму відстані")
+        st.subheader("Критерій 2 - мінімізація максимуму відстані")
         col_d, col_e, col_f = st.columns(3)
         col_d.metric("Найкращий максимум відстані", val2)
         col_e.metric("Знайдено нових кращих у поколіннях", str(iters2))
@@ -475,8 +466,8 @@ elif tab == "Генетичний алгоритм":
         st.divider()
 
         st.subheader("Порівняння двох критеріїв")
-        dists1_for_perm1 = [kendall_dist(perm1, exp) for exp in expert_perms]
-        dists1_for_perm2 = [kendall_dist(perm2, exp) for exp in expert_perms]
+        dists1_for_perm1 = [firstdist(perm1, exp) for exp in expert_perms]
+        dists1_for_perm2 = [firstdist(perm2, exp) for exp in expert_perms]
         cmp_df = pd.DataFrame({
             "Критерій": ["Сума відстаней (К1)", "Максимум відстані (К2)", "Кількість розв'язків"],
             "Ранжування К1": [sum(dists1_for_perm1), max(dists1_for_perm1), nsol1],
