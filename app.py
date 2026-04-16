@@ -1,4 +1,5 @@
 import base64
+import math
 import os
 import random
 import matplotlib.pyplot as plt
@@ -172,15 +173,11 @@ def generate_expert_perms(objects_subset: list, n_experts: int = 20, seed: int =
     rng = random.Random(seed)
     return [rng.sample(objects_subset, len(objects_subset)) for _ in range(n_experts)]
 
-
 def firstdist(perm_a: list, perm_b: list) -> int:
-    pos = {o: i for i, o in enumerate(perm_a)}
     dist = 0
-    n = len(perm_b)
-    for i in range(n):
-        for j in range(i + 1, n):
-            if pos[perm_b[i]] > pos[perm_b[j]]:
-                dist += 1
+    for i in range(len(perm_a)):
+        if perm_a[i] != perm_b[i]:
+            dist += 1
     return dist
 
 
@@ -188,11 +185,10 @@ def genetic_rank(
     objects_subset: list,
     expert_perms: list[list],
     fitness_mode: str = "sum",
-    pop_size: int = 80,
+    pop_size: int = 1000,
     generations: int = 200,
-    mut_rate: float = 0.10,
+    mut_rate: float = 0.15,
 ) -> tuple[list, float, list, list, int]:
-    # повертає: (найкраща перестановка, найкраще значення критерію,
     n = len(objects_subset)
     if n == 0:
         return [], 0, [], [], 0
@@ -229,7 +225,7 @@ def genetic_rank(
     best_fit = float("-inf")
     history = []
     improve_iters = []  # номери ітерацій де знайдено новий кращий розв'язок
-    best_solutions = [] # всі унікальні перестановки з найкращим значенням
+    best_solutions = []
 
     for gen in range(generations):
         ranked_pop = sorted(popul, key=fitness, reverse=True)
